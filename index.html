@@ -95,8 +95,7 @@
   #btn-run.locked{background:rgba(255,255,255,.9);color:#182226;border-color:rgba(0,0,0,.15)}
   #btn-aim.active{background:rgba(255,255,255,.9);color:#182226;border-color:rgba(0,0,0,.15)}
   #btn-fire{right:calc(24px + env(safe-area-inset-right));bottom:calc(24px + env(safe-area-inset-bottom));width:84px;height:84px;font-size:24px}
-  #btn-jump{right:calc(126px + env(safe-area-inset-right));bottom:calc(36px + env(safe-area-inset-bottom));width:64px;height:64px;font-size:18px}
-  #btn-run {right:calc(126px + env(safe-area-inset-right));bottom:calc(118px + env(safe-area-inset-bottom));width:64px;height:64px;font-size:16px}
+  #btn-run {right:calc(126px + env(safe-area-inset-right));bottom:calc(36px + env(safe-area-inset-bottom));width:64px;height:64px;font-size:16px}
   #btn-cover{right:calc(24px + env(safe-area-inset-right));bottom:calc(126px + env(safe-area-inset-bottom));width:56px;height:56px;font-size:15px;opacity:.35}
   #btn-cover.avail{opacity:1}
   #btn-cover.incover{background:rgba(255,255,255,.9);color:#182226;border-color:rgba(0,0,0,.15)}
@@ -154,7 +153,6 @@
 
 <div id="stick"><div class="base"></div><div class="knob"></div></div>
 <button class="tbtn" id="btn-fire" aria-label="Atirar">●<em>ATIRAR</em></button>
-<button class="tbtn" id="btn-jump" aria-label="Pular">▲<em>PULO</em></button>
 <button class="tbtn" id="btn-run" aria-label="Correr">»<em>CORRER</em></button>
 <button class="tbtn" id="btn-cover" aria-label="Cover">▤<em>COVER</em></button>
 <button class="tbtn" id="btn-aim" aria-label="Mirar">⌖<em>MIRA</em></button>
@@ -275,14 +273,14 @@ const sky=new THREE.Mesh(new THREE.SphereGeometry(1000,40,24),new THREE.ShaderMa
 }));
 sky.renderOrder=-2;scene.add(sky);
 
-scene.add(new THREE.HemisphereLight(0xbfd9ee,0x98a094,0.95));
+scene.add(new THREE.HemisphereLight(0xbfd9ee,0x98a094,1.5));
 const sun=new THREE.DirectionalLight(0xfff1dc,3.0);
 sun.castShadow=true;
 sun.shadow.mapSize.set(isTouch?1024:2048,isTouch?1024:2048);
 Object.assign(sun.shadow.camera,{left:-22,right:22,top:22,bottom:-22,near:1,far:90});
 sun.shadow.bias=-0.0006;
 scene.add(sun,sun.target);
-const fill=new THREE.DirectionalLight(0x9ec3d8,0.4);fill.position.set(-24,20,-30);scene.add(fill);
+const fill=new THREE.DirectionalLight(0x9ec3d8,0.8);fill.position.set(-24,20,-30);scene.add(fill);
 
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(3000,3000),
   new THREE.MeshStandardMaterial({color:0xb9c3c7,roughness:1}));
@@ -314,7 +312,7 @@ grid.rotation.x=-Math.PI/2;grid.position.y=.03;grid.renderOrder=1;scene.add(grid
 const player=new THREE.Group();scene.add(player);
 const body=new THREE.Group();player.add(body);
 const capsule=new THREE.Mesh(new THREE.CapsuleGeometry(.42,.85,8,24),
-  new THREE.MeshStandardMaterial({color:0xff6a3d,roughness:.45,metalness:.15}));
+  new THREE.MeshStandardMaterial({color:0xff6a3d,roughness:.9,metalness:0}));
 capsule.position.y=.845;capsule.castShadow=true;body.add(capsule);
 const visorMat=new THREE.MeshStandardMaterial({color:0x120a04,emissive:0xffd9a8,emissiveIntensity:2.2,roughness:.4});
 const visor=new THREE.Mesh(new THREE.BoxGeometry(.34,.1,.1),visorMat);
@@ -332,10 +330,12 @@ const CLIP_FILES={
   idle:'flank/Untitled.fbx',
   run:'flank/run.fbx',
   jump:'flank/Jump.fbx',
+  runjump:'flank/Run Jump.fbx',
   p_idle:'flank/Pistol Idle.fbx',
   p_walk:'flank/Pistol Walk.fbx',
   p_run:'flank/Pistol Run.fbx',
   p_jump:'flank/Pistol Jump.fbx',
+  p_runjump:'flank/Run and Walk Pistol Jump.fbx',
 };
 
 function findHips(fbx){
@@ -375,9 +375,10 @@ function toStandard(mat){
     if(mat.transparent!==undefined)std.transparent=mat.transparent;
     if(mat.opacity!==undefined)std.opacity=mat.opacity;
     if(mat.side!==undefined)std.side=mat.side;
-    std.roughness=0.85;
-    std.metalness=0.05;
   }
+  /* sem reflexo: totalmente fosco */
+  std.metalness=0;
+  std.roughness=0.95;
   if(std.emissive)std.emissive.setHex(0x000000);
   if(!std.map&&std.color){
     const lum=std.color.r*0.299+std.color.g*0.587+std.color.b*0.114;
@@ -493,7 +494,7 @@ const enemySightRay=new THREE.Raycaster();
 const sightDir=new THREE.Vector3();
 function spawnEnemy(x,z){
   const group=new THREE.Group();group.position.set(x,0,z);
-  const mat=new THREE.MeshStandardMaterial({color:0x6e3030,roughness:.6,metalness:.1,emissive:0xffffff,emissiveIntensity:0});
+  const mat=new THREE.MeshStandardMaterial({color:0x8a4444,roughness:.95,metalness:0,emissive:0xffffff,emissiveIntensity:0});
   const bodyM=new THREE.Mesh(enemyGeo,mat);bodyM.position.y=.845;bodyM.castShadow=true;group.add(bodyM);
   const vm=new THREE.MeshStandardMaterial({color:0x101010,emissive:0x9aa0a6,emissiveIntensity:.6,roughness:.4});
   const vis=new THREE.Mesh(new THREE.BoxGeometry(.34,.1,.1),vm);vis.position.set(0,1.16,.36);group.add(vis);
@@ -587,14 +588,15 @@ document.getElementById('btn-wheel').addEventListener('pointerdown',e=>{e.stopPr
 /* estado */
 const WALK=4.3,RUN=7.6,G=15,JUMP=5.8;
 const AIM_AHEAD=2.0;
-const AIM_DIST=1.8,AIM_FOV=46;
+const AIM_FOV=46;
 const state={pos:new THREE.Vector3(),vel:new THREE.Vector3(),vy:0,grounded:true,walk:0,squash:0,runF:0};
 const SHOULDER_R=1.2,SHOULDER_L=-1.2;
-const cam={yaw:0,pitch:.2,dist:2.2,distGoal:2.2,shoulder:SHOULDER_L,pos:new THREE.Vector3()};
+const cam={yaw:0,pitch:.2,dist:2.2,distGoal:2.2,shoulder:SHOULDER_R,pos:new THREE.Vector3()}; // ombro padrão = direito
 let shoulderS=cam.shoulder;
 let camInit=false,started=false,simTime=0,runLocked=false,msgT=0;
 let firing=false,fireTimer=0,recoilUp=0;
 let aiming=false;
+let prevGrounded=true,airRun=false;
 let ammo=UZI_MAG,reloading=false,reloadT=0;
 let playerHP=PLAYER_MAX_HP;
 let wheelOpen=false,timeScale=1;
@@ -728,7 +730,6 @@ function tryJump(){
   }
 }
 
-/* desktop: clique esquerdo atira · botão direito mira */
 el.addEventListener('mousedown',e=>{
   if(!started||isTouch||wheelOpen)return;
   if(e.button===0)firing=true;
@@ -771,7 +772,7 @@ const endPointer=e=>{
       runLocked=!runLocked;
       btnRun.classList.toggle('locked',runLocked);
       const now=performance.now();
-      if(now-runLastTap<300)tryJump(); /* 2 toques = pulo (celular) */
+      if(now-runLastTap<300)tryJump();
       runLastTap=now;
     }
     runDragId=null;btnRun.classList.remove('active');
@@ -788,7 +789,6 @@ btnRun.addEventListener('pointerdown',e=>{
   btnRun.classList.add('active');
   runDragId=e.pointerId;runDragX=e.clientX;runMoved=false;
 });
-document.getElementById('btn-jump').addEventListener('pointerdown',e=>{e.stopPropagation();if(wheelOpen){closeWheel();return;}tryJump();});
 btnCover.addEventListener('pointerdown',e=>{e.stopPropagation();if(wheelOpen){closeWheel();return;}toggleCover();});
 btnFire.addEventListener('pointerdown',e=>{e.stopPropagation();if(wheelOpen){closeWheel();return;}firing=true;});
 ['pointerup','pointerleave','pointercancel'].forEach(t=>btnFire.addEventListener(t,()=>firing=false));
@@ -914,8 +914,8 @@ function frame(){
   simTime+=gdt;
 
   if(!started){cam.yaw+=dt*.12;cam.pitch=damp(cam.pitch,.16,2,dt);cam.dist=damp(cam.dist,6,2,dt);}
-  else cam.dist=damp(cam.dist,aiming?AIM_DIST:cam.distGoal,6,dt);
-  shoulderS=damp(shoulderS,aiming?0:cam.shoulder,7,dt);
+  else cam.dist=damp(cam.dist,cam.distGoal,6,dt);
+  shoulderS=damp(shoulderS,cam.shoulder,7,dt);
 
   let ix=0,iy=0;
   if(started&&!wheelOpen){
@@ -967,6 +967,10 @@ function frame(){
   }
   collideWalls(state.pos);
 
+  /* detecta se saiu do chão correndo (p/ escolher jump vs run-jump) */
+  if(prevGrounded&&!state.grounded)airRun=running;
+  prevGrounded=state.grounded;
+
   if(inCover&&coverData){
     const w=coverData.w,cx=clamp(state.pos.x,w.min.x,w.max.x),cz=clamp(state.pos.z,w.min.z,w.max.z);
     let nx=state.pos.x-cx,nz=state.pos.z-cz,d=Math.hypot(nx,nz);
@@ -1003,26 +1007,29 @@ function frame(){
 
   for(const e of enemies)updateEnemy(e,gdt);
 
-  /* ★ ANIMAÇÃO: sem-arma vs pistola, conforme estado ★ */
   if(mixer){
     mixer.update(gdt);
     const p=equippedWeapon==='uzi'?'p_':'';
     let key;
-    if(!state.grounded)key='jump';
+    if(!state.grounded)key=airRun?'runjump':'jump';
     else if(speed>0.5)key=running?'run':'walk';
     else key='idle';
     let target=p+key;
     if(!actions[target]){
-      if(actions[key])target=key;
-      else if(p&&actions[p+'idle'])target=p+'idle';
-      else if(actions['idle'])target='idle';
-      else{const ks=Object.keys(actions);target=ks.length?ks[0]:null;}
+      if(key==='runjump'){
+        if(actions[p+'jump'])target=p+'jump';
+        else if(actions['jump'])target='jump';
+      }
+      if(!actions[target]){
+        if(actions[key])target=key;
+        else if(actions[p+'idle'])target=p+'idle';
+        else if(actions['idle'])target='idle';
+        else{const ks=Object.keys(actions);target=ks.length?ks[0]:null;}
+      }
     }
     if(target&&actions[target])fadeToAction(target,0.3);
   }
 
-  /* direção do personagem:
-     armado → acompanha a câmera (strafe) · desarmado → direção do movimento */
   const oldYaw=player.rotation.y;
   let targetRot;
   if(equippedWeapon!=='none'){
@@ -1087,4 +1094,4 @@ addEventListener('resize',()=>{
 });
 </script>
 </body>
- </html>
+</html>
