@@ -94,6 +94,7 @@
   .tbtn.active{transform:scale(.92)}
   #btn-run.locked{background:rgba(255,255,255,.9);color:#182226;border-color:rgba(0,0,0,.15)}
   #btn-aim.active{background:rgba(255,255,255,.9);color:#182226;border-color:rgba(0,0,0,.15)}
+  #btn-fire.active{background:rgba(255,255,255,.9);color:#182226;border-color:rgba(0,0,0,.15)}
   #btn-fire{right:calc(24px + env(safe-area-inset-right));bottom:calc(24px + env(safe-area-inset-bottom));width:84px;height:84px;font-size:24px}
   #btn-run {right:calc(126px + env(safe-area-inset-right));bottom:calc(36px + env(safe-area-inset-bottom));width:64px;height:64px;font-size:16px}
   #btn-cover{right:calc(24px + env(safe-area-inset-right));bottom:calc(126px + env(safe-area-inset-bottom));width:56px;height:56px;font-size:15px;opacity:.35}
@@ -190,10 +191,20 @@ const isTouch=matchMedia('(pointer: coarse)').matches||'ontouchstart' in window;
 if(isTouch)document.body.classList.add('touch');
 document.addEventListener('gesturestart',e=>e.preventDefault());
 
-/* ===== ÁUDIO PROCEDURAL ===== */
+/* ===== ÁUDIO ===== */
 const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
-function playShoot(){
-  if(audioCtx.state==='suspended')audioCtx.resume();
+
+/* som da arma via uzi.mp3 (com fallback procedural se o arquivo não existir) */
+let uziBuffer=null;
+(async()=>{
+  try{
+    const r=await fetch('uzi.mp3');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    uziBuffer=await audioCtx.decodeAudioData(await r.arrayBuffer());
+  }catch(e){console.warn('uzi.mp3 não carregou, usando som procedural.',e);}
+})();
+
+function proceduralShoot(){
   const t=audioCtx.currentTime,vel=0.9+Math.random()*0.2;
   const len=audioCtx.sampleRate*0.1|0;
   const buf=audioCtx.createBuffer(1,len,audioCtx.sampleRate);
@@ -212,9 +223,18 @@ function playShoot(){
   osc.frequency.exponentialRampToValueAtTime(45,t+0.07);
   const g2=audioCtx.createGain();g2.gain.setValueAtTime(0.4*vel,t);g2.gain.exponentialRampToValueAtTime(0.001,t+0.09);
   osc.connect(g2);g2.connect(audioCtx.destination);osc.start(t);osc.stop(t+0.1);
-  const osc2=audioCtx.createOscillator();osc2.type='square';osc2.frequency.value=2500;
-  const g3=audioCtx.createGain();g3.gain.setValueAtTime(0.05*vel,t);g3.gain.exponentialRampToValueAtTime(0.001,t+0.03);
-  osc2.connect(g3);g3.connect(audioCtx.destination);osc2.start(t);osc2.stop(t+0.035);
+}
+function playShoot(){
+  if(audioCtx.state==='suspended')audioCtx.resume();
+  if(uziBuffer){
+    const src=audioCtx.createBufferSource();
+    src.buffer=uziBuffer;
+    const g=audioCtx.createGain();g.gain.value=0.85;
+    src.connect(g);g.connect(audioCtx.destination);
+    src.start();
+  }else{
+    proceduralShoot();
+  }
 }
 function clickAt(time,freq,vol){
   const osc=audioCtx.createOscillator();osc.type='square';osc.frequency.value=freq;
@@ -273,14 +293,15 @@ const sky=new THREE.Mesh(new THREE.SphereGeometry(1000,40,24),new THREE.ShaderMa
 }));
 sky.renderOrder=-2;scene.add(sky);
 
-scene.add(new THREE.HemisphereLight(0xbfd9ee,0x98a094,1.5));
+/* luz mais forte + luz que acompanha o personagem p/ ele não ficar escuro */
+scene.add(new THREE.HemisphereLight(0xbfd9ee,0x98a094,2.2));
 const sun=new THREE.DirectionalLight(0xfff1dc,3.0);
 sun.castShadow=true;
 sun.shadow.mapSize.set(isTouch?1024:2048,isTouch?1024:2048);
 Object.assign(sun.shadow.camera,{left:-22,right:22,top:22,bottom:-22,near:1,far:90});
 sun.shadow.bias=-0.0006;
 scene.add(sun,sun.target);
-const fill=new THREE.DirectionalLight(0x9ec3d8,0.8);fill.position.set(-24,20,-30);scene.add(fill);
+const fill=new THREE.DirectionalLight(0x9ec3d8,1.1);fill.position.set(-24,20,-30);scene.add(fill);
 
 const ground=new THREE.Mesh(new THREE.PlaneGeometry(3000,3000),
   new THREE.MeshStandardMaterial({color:0xb9c3c7,roughness:1}));
@@ -317,6 +338,10 @@ capsule.position.y=.845;capsule.castShadow=true;body.add(capsule);
 const visorMat=new THREE.MeshStandardMaterial({color:0x120a04,emissive:0xffd9a8,emissiveIntensity:2.2,roughness:.4});
 const visor=new THREE.Mesh(new THREE.BoxGeometry(.34,.1,.1),visorMat);
 visor.position.set(0,1.16,.36);body.add(visor);
+/* luz suave presa ao personagem p/ ele nunca ficar escuro */
+const charLight=new THREE.PointLight(0xffffff,9,13,1.8);
+charLight.position.set(0,3,1);
+player.add(charLight);
 
 /* ===== MODELO FBX ===== */
 const MODEL_Y_ROT=0;
@@ -376,7 +401,6 @@ function toStandard(mat){
     if(mat.opacity!==undefined)std.opacity=mat.opacity;
     if(mat.side!==undefined)std.side=mat.side;
   }
-  /* sem reflexo: totalmente fosco */
   std.metalness=0;
   std.roughness=0.95;
   if(std.emissive)std.emissive.setHex(0x000000);
@@ -578,7 +602,10 @@ function openWheel(){
 function closeWheel(){wheelOpen=false;document.body.classList.remove('wheel-open');}
 function selectWeapon(id){
   if(id==='uzi'){equippedWeapon='uzi';ammo=UZI_MAG;reloading=false;}
-  else if(id==='none'){equippedWeapon='none';reloading=false;}
+  else if(id==='none'){
+    equippedWeapon='none';reloading=false;
+    autoFire=false;btnFire.classList.remove('active');
+  }
   syncArmed();updateAmmo();closeWheel();
   showMsg(id==='uzi'?'Uzi equipada':'Arma guardada',1200);
 }
@@ -591,10 +618,10 @@ const AIM_AHEAD=2.0;
 const AIM_FOV=46;
 const state={pos:new THREE.Vector3(),vel:new THREE.Vector3(),vy:0,grounded:true,walk:0,squash:0,runF:0};
 const SHOULDER_R=1.2,SHOULDER_L=-1.2;
-const cam={yaw:0,pitch:.2,dist:2.2,distGoal:2.2,shoulder:SHOULDER_R,pos:new THREE.Vector3()}; // ombro padrão = direito
+const cam={yaw:0,pitch:.2,dist:2.2,distGoal:2.2,shoulder:SHOULDER_R,pos:new THREE.Vector3()};
 let shoulderS=cam.shoulder;
 let camInit=false,started=false,simTime=0,runLocked=false,msgT=0;
-let firing=false,fireTimer=0,recoilUp=0;
+let firing=false,autoFire=false,fireTimer=0,recoilUp=0;
 let aiming=false;
 let prevGrounded=true,airRun=false;
 let ammo=UZI_MAG,reloading=false,reloadT=0;
@@ -622,6 +649,8 @@ const wastedEl=document.getElementById('wasted');
 const ammoCount=document.getElementById('ammo-count'),ammoState=document.getElementById('ammo-state');
 const hpFill=document.getElementById('hp-fill');
 const crosshairEl=document.getElementById('crosshair');
+const btnAim=document.getElementById('btn-aim');
+const btnFire=document.getElementById('btn-fire');
 let dmgT=0,wastedT=0;
 function showMsg(text,ms=6000){tip.textContent=text;tip.classList.add('show');clearTimeout(msgT);msgT=setTimeout(()=>tip.classList.remove('show'),ms);}
 function updateAmmo(){
@@ -639,7 +668,8 @@ function damagePlayer(n){
 function playerDeath(){
   playerHP=PLAYER_MAX_HP;updateHealth();
   state.pos.set(0,0,0);state.vel.set(0,0,0);state.vy=0;
-  aiming=false;
+  aiming=false;btnAim.classList.remove('active');
+  autoFire=false;btnFire.classList.remove('active');
   wastedEl.classList.add('show');
   clearTimeout(wastedT);wastedT=setTimeout(()=>wastedEl.classList.remove('show'),2500);
 }
@@ -705,7 +735,7 @@ const keys=new Set();
 const stick={active:false,id:null,ox:0,oy:0,x:0,y:0};
 let lookId=null,lx=0,ly=0,runDragId=null,runDragX=0,runMoved=false,runLastTap=0;
 const stickEl=document.getElementById('stick'),knob=stickEl.querySelector('.knob');
-const btnRun=document.getElementById('btn-run'),btnCover=document.getElementById('btn-cover'),btnFire=document.getElementById('btn-fire'),btnAim=document.getElementById('btn-aim');
+const btnRun=document.getElementById('btn-run'),btnCover=document.getElementById('btn-cover');
 
 addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
@@ -720,7 +750,7 @@ addEventListener('keydown',e=>{
   if(e.code==='KeyE'){cam.shoulder=SHOULDER_R;showMsg('Ombro direito',900);}
 });
 addEventListener('keyup',e=>keys.delete(e.code));
-addEventListener('blur',()=>{keys.clear();firing=false;aiming=false;});
+addEventListener('blur',()=>{keys.clear();firing=false;aiming=false;btnAim.classList.remove('active');});
 
 function tryJump(){
   if(started&&state.grounded){
@@ -730,6 +760,7 @@ function tryJump(){
   }
 }
 
+/* desktop: clique esquerdo atira (segurar) · botão direito mira */
 el.addEventListener('mousedown',e=>{
   if(!started||isTouch||wheelOpen)return;
   if(e.button===0)firing=true;
@@ -790,10 +821,28 @@ btnRun.addEventListener('pointerdown',e=>{
   runDragId=e.pointerId;runDragX=e.clientX;runMoved=false;
 });
 btnCover.addEventListener('pointerdown',e=>{e.stopPropagation();if(wheelOpen){closeWheel();return;}toggleCover();});
-btnFire.addEventListener('pointerdown',e=>{e.stopPropagation();if(wheelOpen){closeWheel();return;}firing=true;});
-['pointerup','pointerleave','pointercancel'].forEach(t=>btnFire.addEventListener(t,()=>firing=false));
-btnAim.addEventListener('pointerdown',e=>{e.stopPropagation();if(wheelOpen){closeWheel();return;}aiming=true;btnAim.classList.add('active');});
-['pointerup','pointerleave','pointercancel'].forEach(t=>btnAim.addEventListener(t,()=>{aiming=false;btnAim.classList.remove('active');}));
+
+/* botão ATIRAR: no celular é TOGGLE (1 toque atira direto, outro para); no PC é segurar */
+btnFire.addEventListener('pointerdown',e=>{
+  e.stopPropagation();
+  if(wheelOpen){closeWheel();return;}
+  if(isTouch){
+    autoFire=!autoFire;
+    btnFire.classList.toggle('active',autoFire);
+  }else{
+    firing=true;
+  }
+});
+btnFire.addEventListener('pointerup',e=>{if(!isTouch)firing=false;});
+['pointerleave','pointercancel'].forEach(t=>btnFire.addEventListener(t,()=>{if(!isTouch)firing=false;}));
+
+btnAim.addEventListener('pointerdown',e=>{
+  e.stopPropagation();
+  if(wheelOpen){closeWheel();return;}
+  aiming=!aiming;
+  btnAim.classList.toggle('active',aiming);
+});
+
 document.getElementById('btn-shoulder').addEventListener('pointerdown',e=>{e.stopPropagation();toggleShoulder();});
 
 function start(){
@@ -801,7 +850,7 @@ function start(){
   document.body.classList.add('playing');
   document.getElementById('intro').classList.add('hidden');
   if(audioCtx.state==='suspended')audioCtx.resume();
-  showMsg(isTouch?'Joystick move · arraste p/ olhar · MIRA mira · 2 toques em CORRER pula':'Clique p/ prender o mouse · botão direito mira · TAB = armas',isTouch?4500:3500);
+  showMsg(isTouch?'Joystick move · arraste p/ olhar · ATIRAR liga/desliga o tiro · 2 toques em CORRER pula':'Clique p/ prender o mouse · botão direito mira · TAB = armas',isTouch?4500:3500);
 }
 document.getElementById('btn-start').addEventListener('click',start);
 
@@ -967,7 +1016,6 @@ function frame(){
   }
   collideWalls(state.pos);
 
-  /* detecta se saiu do chão correndo (p/ escolher jump vs run-jump) */
   if(prevGrounded&&!state.grounded)airRun=running;
   prevGrounded=state.grounded;
 
@@ -999,7 +1047,7 @@ function frame(){
 
   if(reloading){reloadT-=gdt;if(reloadT<=0){reloading=false;ammo=UZI_MAG;updateAmmo();}}
   fireTimer-=gdt;
-  if(firing&&started&&!wheelOpen){
+  if((firing||autoFire)&&started&&!wheelOpen){
     if(equippedWeapon==='none'){if(fireTimer<=0){playEmpty();fireTimer=0.3;}}
     else if(ammo>0&&!reloading){if(fireTimer<=0){shoot();fireTimer=aiming?UZI_INTERVAL*0.9:UZI_INTERVAL;}}
     else if(ammo<=0&&!reloading)startReload();
