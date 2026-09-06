@@ -598,11 +598,9 @@ function selectWeapon(id){
 document.getElementById('shade').addEventListener('click',closeWheel);
 
 /* estado */
-// ★ CORRIDA MAIS LENTA: RUN reduzido de 7.6 para 5.8 ★
 const WALK=4.3,RUN=5.8,G=15,JUMP=5.8;
 const AIM_AHEAD=2.0,AIM_FOV=46;
 const state={pos:new THREE.Vector3(),vel:new THREE.Vector3(),vy:0,grounded:true,walk:0,squash:0,runF:0};
-// ★ CÂMERA MAIS PERTO: dist reduzido de 2.2 para 1.8, shoulder ajustado ★
 const SHOULDER_R=0.9,SHOULDER_L=-0.9;
 const cam={yaw:0,pitch:.2,dist:1.8,distGoal:1.8,shoulder:SHOULDER_R,pos:new THREE.Vector3()};
 let shoulderS=cam.shoulder;
@@ -744,15 +742,28 @@ function tryJump(){
   }
 }
 
+// ★ CORREÇÃO DA CÂMERA / MIRA NO PC ★
+// Botão direito = mirar. Quando mirando, NÃO aplica rotação pelo mouse.
+// A rotação da câmera vem apenas do joystick (mobile) ou fica travada (PC).
+let rightMouseDown = false;
+
 el.addEventListener('mousedown',e=>{
   if(!started||isTouch||wheelOpen)return;
-  if(e.button===0)firing=true;
-  else if(e.button===2)aiming=true;
+  if(e.button===0){
+    firing=true;
+  } else if(e.button===2){
+    rightMouseDown = true;
+    aiming = true;
+  }
 });
 addEventListener('mouseup',e=>{
   if(isTouch)return;
-  if(e.button===0)firing=false;
-  else if(e.button===2)aiming=false;
+  if(e.button===0){
+    firing=false;
+  } else if(e.button===2){
+    rightMouseDown = false;
+    aiming = false;
+  }
 });
 
 el.addEventListener('pointerdown',e=>{
@@ -764,11 +775,20 @@ el.addEventListener('pointerdown',e=>{
   }else{lookId=e.pointerId;lx=e.clientX;ly=e.clientY;}
 });
 addEventListener('pointermove',e=>{
+  // ★ Se estiver mirando no PC, NÃO rotaciona a câmera pelo mouse ★
   if(e.pointerType==='mouse'&&started){
-    if(document.pointerLockElement){cam.yaw-=e.movementX*.0026;cam.pitch=clamp(cam.pitch+e.movementY*.0026,-.12,.95);}
-    else{const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;if(e.buttons&1){cam.yaw-=dx*.0034;cam.pitch=clamp(cam.pitch+dy*.003,-.12,.95);}}
+    if(rightMouseDown) return; // Mira ativa: ignora rotação do mouse
+    
+    if(document.pointerLockElement){
+      cam.yaw-=e.movementX*.0026;
+      cam.pitch=clamp(cam.pitch+e.movementY*.0026,-.12,.95);
+    }else{
+      const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;
+      if(e.buttons&1){cam.yaw-=dx*.0034;cam.pitch=clamp(cam.pitch+dy*.003,-.12,.95);}
+    }
     return;
   }
+  // Touch: look area continua funcionando normalmente
   if(e.pointerId===lookId){const dx=e.clientX-lx,dy=e.clientY-ly;lx=e.clientX;ly=e.clientY;cam.yaw-=dx*.005;cam.pitch=clamp(cam.pitch+dy*.0045,-.12,.95);}
   else if(e.pointerId===stick.id&&stick.active){
     let dx=e.clientX-stick.ox,dy=e.clientY-stick.oy;const m=Math.hypot(dx,dy),R=52;
